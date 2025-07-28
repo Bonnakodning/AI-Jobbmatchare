@@ -49,9 +49,9 @@ if st.button("Hämta & analysera annonser"):
             st.subheader("📊 Matchningsresultat:")
             results = []
     for job in job_ads:
-        ad_text = job.get("description", {}).get("text", "")
-        if not ad_text.strip():
-            continue  # hoppa över tomma annonser
+    ad_text = job.get("description", {}).get("text", "")
+    if not ad_text.strip():
+        continue  # hoppa över tomma annonser
 
     ad_embedding = model.encode(ad_text, convert_to_tensor=True)
     score = util.cos_sim(profile_embedding, ad_embedding).item()
@@ -59,8 +59,7 @@ if st.button("Hämta & analysera annonser"):
     title = job.get("headline", "Okänt jobbnamn")
     url = job.get("webpage_url", "Ingen länk tillgänglig")
     results.append((score, title, url))
-
-
+    
             sorted_results = sorted(results, key=lambda x: x[0], reverse=True)
             for i, (score, title, url) in enumerate(sorted_results, 1):
                 st.markdown(f"**#{i} – {round(score*100, 1)}% match**\n[{title}]({url})\n---")
