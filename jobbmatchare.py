@@ -50,7 +50,7 @@ if st.button("Hämta & analysera annonser"):
             results = []
     for job in job_ads:
         ad_text = job.get("description", {}).get("text", "")
-    if not ad_text.strip():
+        if not ad_text.strip():
     continue  # hoppa över tomma annonser
 
     ad_embedding = model.encode(ad_text, convert_to_tensor=True)
