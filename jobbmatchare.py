@@ -1,4 +1,5 @@
 import streamlit as st
+import requests
 from sentence_transformers import SentenceTransformer, util
 
 # Din AI-profil
@@ -11,29 +12,50 @@ Gillar svenska företag, gärna Skövdebaserade.
 Styrkor: ledarskap, kreativitet, QA, struktur, positivitet, inkluderande arbetssätt.
 """
 
-# Modell för AI-matchning
+# Initiera AI-modell
 model = SentenceTransformer("all-MiniLM-L6-v2")
-profile_embedding = model.encode(user_profile, convert_to_tensor=True)
+profile_emb = model.encode(user_profile, convert_to_tensor=True)
 
-# Streamlit-gränssnitt
 st.set_page_config(page_title="AI-jobbmatchare", layout="centered")
 st.title("🤖 AI-jobbmatchare")
-st.write("Klistra in jobbannonser nedan, en per rad. Klicka på *Analysera* för att se vilka som passar dig bäst.")
+st.write("Denna app hämtar automatiskt jobbannonser från Arbetsförmedlingen och rankar dem mot din profil.")
 
-input_text = st.text_area("📋 Jobbannonser", height=200, placeholder="Exempel:\nProducent till spelstudio i Göteborg...\nQA Manager till fintechbolag i Stockholm...")
+# Inställningar för sökning
+st.subheader("🔍 Inställningar för import")
+search_terms = st.text_input("Sökord (kommaseparerade)", "projektledare,QA,producer,manager")
+location = st.text_input("Ort (frivillig, t.ex. Skövde eller Göteborg)", "")
+limit = st.slider("Max antal annonser att analysera", 1, 30, 10)
 
-if st.button("Analysera"):
-    if input_text.strip() == "":
-        st.warning("Du måste klistra in minst en jobbannons.")
+if st.button("Hämta & analysera annonser"):
+    q = " OR ".join([term.strip() for term in search_terms.split(",")])
+    params = {
+        "q": q,
+        "limit": limit,
+        "from": 0
+    }
+    if location:
+        params["municipality"] = location
+
+    # Hämta annonser från JobTech API
+    url = "https://jobsearch.api.jobtechdev.se/search"
+    headers = {"Accept": "application/json"}
+    response = requests.get(url, params=params, headers=headers)
+
+    if response.status_code == 200:
+        jobs = response.json().get("hits", [])
+        if not jobs:
+            st.warning("Inga jobb hittades med de inställningarna.")
+        else:
+            st.subheader("📊 Matchningsresultat:")
+            results = []
+            for job in jobs:
+                ad = f"{job['headline']}. {job.get('description', '')}"
+                ad_emb = model.encode(ad, convert_to_tensor=True)
+                score = util.cos_sim(profile_emb, ad_emb).item()
+                results.append((score, job["headline"], job["url"]))
+
+            sorted_results = sorted(results, key=lambda x: x[0], reverse=True)
+            for i, (score, title, url) in enumerate(sorted_results, 1):
+                st.markdown(f"**#{i} – {round(score*100, 1)}% match**\n[{title}]({url})\n---")
     else:
-        ads = [line.strip() for line in input_text.strip().split('\n') if line.strip()]
-        results = []
-        for ad in ads:
-            ad_embedding = model.encode(ad, convert_to_tensor=True)
-            score = util.cos_sim(profile_embedding, ad_embedding).item()
-            results.append((score, ad))
-        sorted_results = sorted(results, key=lambda x: x[0], reverse=True)
-
-        st.subheader("📊 Matchningsresultat:")
-        for i, (score, ad) in enumerate(sorted_results, 1):
-            st.markdown(f"**#{i} – Matchning: {round(score*100, 1)}%**\n\n{ad}\n---")
+        st.error("Kunde inte hämta jobbannonser. Försök igen senare.")
