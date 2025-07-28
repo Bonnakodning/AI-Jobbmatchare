@@ -48,7 +48,7 @@ if st.button("Hämta & analysera annonser"):
         else:
             st.subheader("📊 Matchningsresultat:")
             results = []
-           for job in job_ads:
+            for job in job_ads:
     ad_text = job.get("description", {}).get("text", "")
     if not ad_text.strip():
         continue  # hoppa över tomma annonser
