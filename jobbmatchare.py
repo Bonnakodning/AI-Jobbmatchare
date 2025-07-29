@@ -58,5 +58,37 @@ if st.button("Hämta annonser och analysera"):
 
         st.success(f"Hittade {len(results)} relevanta annonser!")
 
-        for score, title, url in results:
-            st.markdown(f"### [{title}]({url})\nMatchning: **{score:.2f}**")
+        # Initiera session_state om det inte finns
+if "prioriterade" not in st.session_state:
+    st.session_state.prioriterade = set()
+if "bortvalda" not in st.session_state:
+    st.session_state.bortvalda = set()
+
+# Visa interaktiv lista
+for i, (score, title, url) in enumerate(results):
+    job_id = f"{title}_{i}"  # unikt ID per annons
+
+    if job_id in st.session_state.bortvalda:
+        continue  # hoppa över bortvalda annonser
+
+    cols = st.columns([5, 1, 1])  # Titel + två checkboxar
+
+    with cols[0]:
+        st.markdown(f"### [{title}]({url})\nMatchning: **{score:.2f}**")
+
+    with cols[1]:
+        if st.checkbox("🔼", key=f"prio_{job_id}"):
+            st.session_state.prioriterade.add(job_id)
+
+    with cols[2]:
+        if st.checkbox("❌", key=f"remove_{job_id}"):
+            st.session_state.bortvalda.add(job_id)
+
+# Sortera: Prioriterade först
+def prioritetsordning(item):
+    i, (score, title, url) = item
+    job_id = f"{title}_{i}"
+    return (job_id not in st.session_state.prioriterade, -score)
+
+# Visa om du vill sortera direkt
+results = sorted(list(enumerate(results)), key=prioritetsordning)
