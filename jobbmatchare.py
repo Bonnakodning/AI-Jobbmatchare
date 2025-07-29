@@ -64,8 +64,25 @@ if "prioriterade" not in st.session_state:
 if "bortvalda" not in st.session_state:
     st.session_state.bortvalda = set()
 
+# Initiera session_state om det inte finns
+if "prioriterade" not in st.session_state:
+    st.session_state.prioriterade = set()
+if "bortvalda" not in st.session_state:
+    st.session_state.bortvalda = set()
+
+# Lägg till ID på varje annons för interaktion
+visade_resultat = list(enumerate(results))
+
+# Sortera: Prioriterade först
+def prioritetsordning(item):
+    i, (score, title, url) = item
+    job_id = f"{title}_{i}"
+    return (job_id not in st.session_state.prioriterade, -score)
+
+visade_resultat.sort(key=prioritetsordning)
+
 # Visa interaktiv lista
-for i, (score, title, url) in enumerate(results):
+for i, (score, title, url) in viste_resultat:
     job_id = f"{title}_{i}"  # unikt ID per annons
 
     if job_id in st.session_state.bortvalda:
@@ -83,12 +100,3 @@ for i, (score, title, url) in enumerate(results):
     with cols[2]:
         if st.checkbox("❌", key=f"remove_{job_id}"):
             st.session_state.bortvalda.add(job_id)
-
-# Sortera: Prioriterade först
-def prioritetsordning(item):
-    i, (score, title, url) = item
-    job_id = f"{title}_{i}"
-    return (job_id not in st.session_state.prioriterade, -score)
-
-# Visa om du vill sortera direkt
-results = sorted(list(enumerate(results)), key=prioritetsordning)
