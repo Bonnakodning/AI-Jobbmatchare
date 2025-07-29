@@ -1,65 +1,60 @@
 import streamlit as st
 import requests
-from sentence_transformers import SentenceTransformer, util
 
-st.title("AI-jobbmatchare 🔍💼")
-st.markdown("Hittar jobbannonser som passar **din profil** – och låter dig sortera dem interaktivt!")
+st.set_page_config(page_title="AI Jobbmatchare", layout="wide")
+st.title("🤖 AI-jobbmatchare – hitta rätt jobb för dig!")
 
-# Din profiltext – användaren fyller i denna
-profiltext = st.text_area("🧠 Din erfarenhet, mål och önskemål:", 
-    "Projektledare, QA manager, producer inom iGaming och spelutveckling. Söker jobb hemifrån eller hybrid, gärna i Skövde. Prioriterar frihet, lön över 40 000 kr, svenskt företag. Styrkor: ledarskap, kreativitet, struktur, QA, projektledning, inkluderande arbetssätt.")
+# Inställningar
+antal_annons = st.slider("📊 Hur många annonser vill du se?", 5, 30, 10)
 
-# Hämta jobbannonser automatiskt
-@st.cache_data
-def hamta_jobbannonser():
-    url = "https://jobsearch.api.jobtechdev.se/search?q=projektledare%20eller%20QA%20eller%20producer&limit=50"
-    headers = {"Accept": "application/json"}
-    resp = requests.get(url, headers=headers)
-    if resp.status_code != 200:
-        return []
-    return resp.json().get("hits", [])
+oönskade_branscher = st.multiselect("🚫 Filtrera bort branscher du inte vill ha:",
+    ["Bygg", "Snickeri", "Anläggning", "Lager", "Chaufför", "Vård", "Truck", "Industri", "Montör", "Mekaniker"],
+    default=["Bygg", "Snickeri", "Anläggning", "Lager", "Chaufför", "Vård", "Truck", "Industri", "Montör", "Mekaniker"]
+)
+stopplista = [x.lower() for x in oönskade_branscher]
 
-job_ads = hamta_jobbannonser()
+# Nyckelord att matcha mot
+nyckelord = [
+    "projektledare", "producer", "qa", "test", "speldesign", "scrum", 
+    "agil", "skövde", "remote", "hybrid", "ledning", "spelutveckling", "iGaming"
+]
 
-# Ladda modellen
-@st.cache_resource
-def hamta_modell():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+# Ladda annonser från Arbetsförmedlingen (ej API-nyckel krävd för enklare test)
+res = requests.get("https://jobsearch.api.jobtechdev.se/search?q=projektledare&limit=100")
+data = res.json()
+annonser = data.get("hits", [])
 
-model = hamta_modell()
-profile_embedding = model.encode(profiltext, convert_to_tensor=True)
-
-# Matcha annonser mot profil
+# Matchning
 results = []
-for job in job_ads:
+
+for job in annonser:
     ad_text = job.get("description", {}).get("text", "")
-    if not ad_text.strip():
-        continue
-
-    ad_embedding = model.encode(ad_text, convert_to_tensor=True)
-    score = util.cos_sim(profile_embedding, ad_embedding).item()
-
-    title = job.get("headline", "Okänt jobbnamn")
-    url = job.get("webpage_url", "Ingen länk tillgänglig")
+    ad_text = ad_text.lower()
+    score = sum(1 for k in nyckelord if k in ad_text)
+    title = job.get("headline", "Annons utan titel")
+    url = job.get("webpage_url", "#")
     results.append((score, title, url))
 
-# Sortera på matchning först
+# Sortera och filtrera
 results.sort(reverse=True)
 
-# -----------------------
-# Interaktiv checklista
-# -----------------------
+filtrerade = []
+for score, title, url in results:
+    combined = f"{title} {url}".lower()
+    if any(ord in combined for ord in stopplista):
+        continue
+    filtrerade.append((score, title, url))
 
-# Initiera session_state
+results = filtrerade[:antal_annons]
+
+# Interaktivt UI – prioritering och bortval
 if "prioriterade" not in st.session_state:
     st.session_state.prioriterade = set()
 if "bortvalda" not in st.session_state:
     st.session_state.bortvalda = set()
 
-# Lägg till ID för varje annons
 visade_resultat = list(enumerate(results))
 
-# Sortera: Prioriterade först
 def prioritetsordning(item):
     i, (score, title, url) = item
     job_id = f"{title}_{i}"
@@ -67,7 +62,6 @@ def prioritetsordning(item):
 
 visade_resultat.sort(key=prioritetsordning)
 
-# Visa resultat
 for i, (score, title, url) in visade_resultat:
     job_id = f"{title}_{i}"
 
@@ -75,8 +69,9 @@ for i, (score, title, url) in visade_resultat:
         continue
 
     cols = st.columns([5, 1, 1])
+
     with cols[0]:
-        st.markdown(f"### [{title}]({url})\nMatchning: **{score:.2f}**")
+        st.markdown(f"### [{title}]({url})\nMatchning: **{score}**")
 
     with cols[1]:
         if st.checkbox("🔼", key=f"prio_{job_id}"):
