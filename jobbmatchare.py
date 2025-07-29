@@ -2,75 +2,61 @@ import streamlit as st
 import requests
 from sentence_transformers import SentenceTransformer, util
 
-# Din AI-profil
-user_profile = """
-Jag är projektledare, QA manager och producer med erfarenhet inom iGaming och spelutveckling.
-Söker roller som projektledare, manager, QA manager eller producer.
-Vill jobba hemifrån, hybrid eller i Skövde, men kan även pendla till Göteborg eller Stockholm 1 gång/vecka.
-Söker frihet, lön över 40 000 kr/mån, kreativ arbetsmiljö.
-Gillar svenska företag, gärna baserade i Skövde.
-Styrkor: ledarskap, tänka utanför boxen, kreativ, positiv, noggrann, strukturerad, QA, projektledning, inkluderande arbetssätt.
-"""
+st.title("AI-jobbmatchare 🔍💼")
+st.markdown("Hittar jobbannonser som passar **din profil** – och låter dig sortera dem interaktivt!")
 
-# Initiera modellen
+# Din profiltext – användaren fyller i denna
+profiltext = st.text_area("🧠 Din erfarenhet, mål och önskemål:", 
+    "Projektledare, QA manager, producer inom iGaming och spelutveckling. Söker jobb hemifrån eller hybrid, gärna i Skövde. Prioriterar frihet, lön över 40 000 kr, svenskt företag. Styrkor: ledarskap, kreativitet, struktur, QA, projektledning, inkluderande arbetssätt.")
+
+# Hämta jobbannonser automatiskt
+@st.cache_data
+def hamta_jobbannonser():
+    url = "https://jobsearch.api.jobtechdev.se/search?q=projektledare%20eller%20QA%20eller%20producer&limit=50"
+    headers = {"Accept": "application/json"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code != 200:
+        return []
+    return resp.json().get("hits", [])
+
+job_ads = hamta_jobbannonser()
+
+# Ladda modellen
 @st.cache_resource
-def load_model():
+def hamta_modell():
     return SentenceTransformer('all-MiniLM-L6-v2')
 
-model = load_model()
-profile_embedding = model.encode(user_profile, convert_to_tensor=True)
+model = hamta_modell()
+profile_embedding = model.encode(profiltext, convert_to_tensor=True)
 
-st.title("🤖 AI Jobbmatchare")
+# Matcha annonser mot profil
+results = []
+for job in job_ads:
+    ad_text = job.get("description", {}).get("text", "")
+    if not ad_text.strip():
+        continue
 
-if st.button("Hämta annonser och analysera"):
-    with st.spinner("🔍 Hämtar annonser och analyserar..."):
+    ad_embedding = model.encode(ad_text, convert_to_tensor=True)
+    score = util.cos_sim(profile_embedding, ad_embedding).item()
 
-        # Hämta platsannonser från Arbetsförmedlingen
-        url = "https://jobsearch.api.jobtechdev.se/search"
-        params = {
-            "q": "projektledare OR qa OR testledare OR producer OR manager",
-            "limit": 20
-        }
-        headers = {
-            "Accept": "application/json"
-        }
+    title = job.get("headline", "Okänt jobbnamn")
+    url = job.get("webpage_url", "Ingen länk tillgänglig")
+    results.append((score, title, url))
 
-        response = requests.get(url, params=params, headers=headers)
-        data = response.json()
-        job_ads = data.get("hits", [])
+# Sortera på matchning först
+results.sort(reverse=True)
 
-        results = []
+# -----------------------
+# Interaktiv checklista
+# -----------------------
 
-        for job in job_ads:
-            ad_text = job.get("description", {}).get("text", "")
-            if not ad_text.strip():
-                continue  # hoppa över tomma annonser
-
-            ad_embedding = model.encode(ad_text, convert_to_tensor=True)
-            score = util.cos_sim(profile_embedding, ad_embedding).item()
-
-            title = job.get("headline", "Okänt jobbnamn")
-            url = job.get("webpage_url", "Ingen länk tillgänglig")
-            results.append((score, title, url))
-
-        # Sortera efter högsta poäng
-        results.sort(reverse=True, key=lambda x: x[0])
-
-        st.success(f"Hittade {len(results)} relevanta annonser!")
-
-        # Initiera session_state om det inte finns
+# Initiera session_state
 if "prioriterade" not in st.session_state:
     st.session_state.prioriterade = set()
 if "bortvalda" not in st.session_state:
     st.session_state.bortvalda = set()
 
-# Initiera session_state om det inte finns
-if "prioriterade" not in st.session_state:
-    st.session_state.prioriterade = set()
-if "bortvalda" not in st.session_state:
-    st.session_state.bortvalda = set()
-
-# Lägg till ID på varje annons för interaktion
+# Lägg till ID för varje annons
 visade_resultat = list(enumerate(results))
 
 # Sortera: Prioriterade först
@@ -81,15 +67,14 @@ def prioritetsordning(item):
 
 visade_resultat.sort(key=prioritetsordning)
 
-# Visa interaktiv lista
-for i, (score, title, url) in viste_resultat:
-    job_id = f"{title}_{i}"  # unikt ID per annons
+# Visa resultat
+for i, (score, title, url) in visade_resultat:
+    job_id = f"{title}_{i}"
 
     if job_id in st.session_state.bortvalda:
-        continue  # hoppa över bortvalda annonser
+        continue
 
-    cols = st.columns([5, 1, 1])  # Titel + två checkboxar
-
+    cols = st.columns([5, 1, 1])
     with cols[0]:
         st.markdown(f"### [{title}]({url})\nMatchning: **{score:.2f}**")
 
