@@ -4,7 +4,10 @@ import requests
 st.set_page_config(page_title="AI Jobbmatchare", layout="wide")
 st.title("🤖 AI-jobbmatchare – hitta rätt jobb för dig!")
 
-# Inställningar
+# ░█▀▀░█▀█░█▀█░█▀▀░█▀▀░█▀▀░█▀▄░█▀▀
+# ░█▀▀░█▀█░█░█░█▀▀░▀▀█░█▀▀░█▀▄░█▀▀
+# ░▀▀▀░▀░▀░▀░▀░▀▀▀░▀▀▀░▀▀▀░▀░▀░▀▀▀
+
 antal_annons = st.slider("📊 Hur många annonser vill du se?", 5, 30, 10)
 
 oönskade_branscher = st.multiselect("🚫 Filtrera bort branscher du inte vill ha:",
@@ -13,29 +16,24 @@ oönskade_branscher = st.multiselect("🚫 Filtrera bort branscher du inte vill 
 )
 stopplista = [x.lower() for x in oönskade_branscher]
 
-# Nyckelord att matcha mot
 nyckelord = [
     "projektledare", "producer", "qa", "test", "speldesign", "scrum", 
     "agil", "skövde", "remote", "hybrid", "ledning", "spelutveckling", "iGaming"
 ]
 
-# Ladda annonser från Arbetsförmedlingen (ej API-nyckel krävd för enklare test)
 res = requests.get("https://jobsearch.api.jobtechdev.se/search?q=projektledare&limit=100")
 data = res.json()
 annonser = data.get("hits", [])
 
-# Matchning
 results = []
 
 for job in annonser:
-    ad_text = job.get("description", {}).get("text", "")
-    ad_text = ad_text.lower()
+    ad_text = job.get("description", {}).get("text", "").lower()
     score = sum(1 for k in nyckelord if k in ad_text)
     title = job.get("headline", "Annons utan titel")
     url = job.get("webpage_url", "#")
     results.append((score, title, url))
 
-# Sortera och filtrera
 results.sort(reverse=True)
 
 filtrerade = []
@@ -47,7 +45,10 @@ for score, title, url in results:
 
 results = filtrerade[:antal_annons]
 
-# Interaktivt UI – prioritering och bortval
+# ░█▀▀░█░█░█▀▀░█▀▀░█▀▀
+# ░█▀▀░█░█░█▀▀░█░█░▀▀█
+# ░▀▀▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀
+
 if "prioriterade" not in st.session_state:
     st.session_state.prioriterade = set()
 if "bortvalda" not in st.session_state:
@@ -62,21 +63,26 @@ def prioritetsordning(item):
 
 visade_resultat.sort(key=prioritetsordning)
 
+st.markdown("## ✨ Dina jobbmatchningar")
+
 for i, (score, title, url) in visade_resultat:
     job_id = f"{title}_{i}"
 
     if job_id in st.session_state.bortvalda:
         continue
 
-    cols = st.columns([5, 1, 1])
+    with st.container():
+        st.markdown(f"**🔗 [{title}]({url})**  \n🎯 Matchning: `{score}`", unsafe_allow_html=True)
 
-    with cols[0]:
-        st.markdown(f"### [{title}]({url})\nMatchning: **{score}**")
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("⭐ Prioritera", key=f"prio_{job_id}"):
+                st.session_state.prioriterade.add(job_id)
+                st.rerun()
 
-    with cols[1]:
-        if st.checkbox("🔼", key=f"prio_{job_id}"):
-            st.session_state.prioriterade.add(job_id)
+        with col2:
+            if st.button("🗑️ Ta bort", key=f"remove_{job_id}"):
+                st.session_state.bortvalda.add(job_id)
+                st.rerun()
 
-    with cols[2]:
-        if st.checkbox("❌", key=f"remove_{job_id}"):
-            st.session_state.bortvalda.add(job_id)
+        st.markdown("---")
